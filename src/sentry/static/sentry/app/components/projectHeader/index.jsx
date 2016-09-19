@@ -71,9 +71,9 @@ const ProjectHeader = React.createClass({
               </a>
             </BookmarkToggle>
             {access.has('project:write') &&
-              <a className={navSection == 'settings' ? 'btn btn-sm btn-default active' : 'btn btn-sm btn-default'} href={`/${org.slug}/${project.slug}/settings/`}>
+              <Link className={navSection == 'settings' ? 'btn btn-sm btn-default active' : 'btn btn-sm btn-default'} to={`/${org.slug}/${project.slug}/settings/`}>
                 <span className="icon icon-settings" /> {t('Project Settings')}
-              </a>
+              </Link>
             }
           </div>
         </div>

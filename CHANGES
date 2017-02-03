@@ -17,6 +17,7 @@ Schema Changes
 - Added unique index on ``Release(organization_id, version)``
 - Removed unique index on ``Release(project_id, version)``
 - Added ``GroupCommitResolution`` model.
+- Added Organization Release Commits endpoint
 
 Version 8.13
 ------------

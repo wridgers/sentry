@@ -194,6 +194,50 @@ class MinHashIndex(object):
 
         return result
 
+    def merge(self, scope, destination, sources):
+        source_bucket_frequencies = self.__fetch_bucket_frequencies(scope, sources)
+
+        with self.cluster.map() as client:
+            for source, bands in source_bucket_frequencies.items():
+                for band, frequencies in enumerate(bands):
+                    if not frequencies:
+                        logger.debug('No frequencies recorded for %r in band %r, skipping...', source, band)
+                        continue
+
+                    get_bucket_frequency_key = lambda key: b'{}:{}:{}:{}:{}'.format(
+                        self.namespace,
+                        scope,
+                        self.BUCKET_FREQUENCY,
+                        self.__band_format.pack(band),
+                        key,
+                    )
+
+                    # Update the bucket frequencies for the destination, based on source data.
+                    for bucket, frequency in frequencies.items():
+                        client.zincrby(
+                            get_bucket_frequency_key(destination),
+                            self.__bucket_format.pack(*bucket),
+                            frequency,
+                        )
+
+                    # Delete the bucket frequencies for the sources.
+                    client.delete(get_bucket_frequency_key(source))
+
+                    for bucket, frequency in frequencies.items():
+                        bucket_membership_set_key = b'{}:{}:{}:{}'.format(
+                            self.namespace,
+                            scope,
+                            self.BUCKET_MEMBERSHIP,
+                            self.__band_format.pack(band),
+                            self.__bucket_format.pack(*bucket),
+                        )
+
+                        # Add destination to bucket membership sets.
+                        client.sadd(bucket_membership_set_key, destination)
+
+                        # Remove the source from the bucket membership sets.
+                        client.srem(bucket_membership_set_key, source)
+
     def query(self, scope, key):
         """\
         Find other entries that are similar to the one repesented by ``key``.
@@ -456,6 +500,25 @@ class FeatureSet(object):
         self.features = features
         self.__number_format = get_number_format(0xFFFFFFFF)
         assert set(self.aliases) == set(self.features)
+
+    def merge(self, destination, sources):
+        assert set([destination.project_id]) == set([
+            source.project_id for source in sources
+        ])
+
+        results = {}
+        for label, feature in self.features.items():
+            alias = self.aliases[label]
+            scope = ':'.join((
+                alias,
+                self.__number_format.pack(destination.project_id),
+            ))
+            results[label] = self.index.merge(
+                scope,
+                self.__number_format.pack(destination.id),
+                [self.__number_format.pack(source.id) for source in sources],
+            )
+        return results
 
     def record(self, event):
         items = []

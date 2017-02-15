@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 
 import math
+from collections import Counter
 
 import pytest
 
@@ -249,7 +250,7 @@ def test_get_frame_signature():
 
 
 class MinHashIndexTestCase(TestCase):
-    def test_index(self):
+    def test_query(self):
         index = MinHashIndex(
             redis.clusters.get('default'),
             0xFFFF,
@@ -270,3 +271,27 @@ class MinHashIndexTestCase(TestCase):
         assert results[2][0] in ('3', '4')  # equidistant pairs, order doesn't really matter
         assert results[3][0] in ('3', '4')
         assert results[4][0] == '5'
+
+    def test_merge(self):
+        index = MinHashIndex(
+            redis.clusters.get('default'),
+            0xFFFF,
+            8,
+            2,
+        )
+
+        index.record('example', '1', 'hello world')
+        index.record('example', '2', 'jello world')
+
+        totals = [Counter() for _ in xrange(8)]
+        frequencies = index.get_bucket_frequencies('example', ['1', '2'])
+        for key, bands in frequencies.items():
+            for i, band in enumerate(bands):
+                totals[i].update(band)
+
+        index.merge('example', '1', ['2'])
+
+        assert index.get_bucket_frequencies('example', ['1', '2']) == {
+            '1': map(lambda band: dict(band), totals),
+            '2': [{} for _ in xrange(8)],
+        }

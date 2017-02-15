@@ -10,6 +10,7 @@ Version 8.14 (Unreleased)
 - [BREAKING] Redis quota implementations now return BasicRedisQuota instead of tuples.
 - Commits using the ``Fixes SHORTID`` annotation will now be tracked appropriately.
 - Added OrganizationReleasesEndpoint
+- Added ReleaseDeploysEndpoint
 
 Schema Changes
 ~~~~~~~~~~~~~~
@@ -17,6 +18,7 @@ Schema Changes
 - Added unique index on ``Release(organization_id, version)``
 - Removed unique index on ``Release(project_id, version)``
 - Added ``GroupCommitResolution`` model.
+- Added ``Deploy`` and ``DeployResource`` model
 
 Version 8.13
 ------------

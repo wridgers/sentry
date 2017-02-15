@@ -164,7 +164,7 @@ class MinHashIndex(object):
             )
         ) / len(target)
 
-    def __fetch_bucket_frequencies(self, scope, keys):
+    def get_bucket_frequencies(self, scope, keys):
         with self.cluster.map() as client:
             responses = {
                 key: map(
@@ -195,7 +195,7 @@ class MinHashIndex(object):
         return result
 
     def merge(self, scope, destination, sources):
-        source_bucket_frequencies = self.__fetch_bucket_frequencies(scope, sources)
+        source_bucket_frequencies = self.get_bucket_frequencies(scope, sources)
 
         with self.cluster.map() as client:
             for source, bands in source_bucket_frequencies.items():
@@ -291,7 +291,7 @@ class MinHashIndex(object):
             )
 
         target_frequencies = scale_bucket_frequencies(
-            self.__fetch_bucket_frequencies(scope, [key])
+            self.get_bucket_frequencies(scope, [key])
         )[key]
 
         # Flatten the results of each band into a single set. (In the future we
@@ -313,7 +313,7 @@ class MinHashIndex(object):
                     ),
                 ),
                 scale_bucket_frequencies(
-                    self.__fetch_bucket_frequencies(scope, candidates)
+                    self.get_bucket_frequencies(scope, candidates)
                 ).items(),
             ),
             key=lambda (key, similarity): (similarity * -1, key),

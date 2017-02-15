@@ -13,6 +13,7 @@ from django.conf import settings
 from sentry.utils import redis
 from sentry.utils.datastructures import BidirectionalMapping
 from sentry.utils.iterators import shingle
+from sentry.utils.functional import map_values
 
 
 logger = logging.getLogger(__name__)
@@ -186,13 +187,8 @@ class MinHashIndex(object):
 
         result = {}
         for key, promises in responses.items():
-            # Resolve each promise, and scale the number of observations
-            # for each bucket to [0,1] value (the proportion of items
-            # observed in that band that belong to the bucket for the key.)
             result[key] = map(
-                lambda promise: scale_to_total({
-                    self.__bucket_format.unpack(k): v for k, v in promise.value
-                }),
+                lambda promise: {self.__bucket_format.unpack(k): v for k, v in promise.value},
                 promises,
             )
 
@@ -239,7 +235,20 @@ class MinHashIndex(object):
                 responses,
             )
 
-        target_frequencies = self.__fetch_bucket_frequencies(scope, [key])[key]
+        def scale_bucket_frequencies(results):
+            """\
+            Scale the number of observations for each bucket to [0,1] value
+            (the proportion of items observed in that band that belong to the
+            bucket for the key.)
+            """
+            return map_values(
+                lambda bands: map(scale_to_total, bands),
+                results,
+            )
+
+        target_frequencies = scale_bucket_frequencies(
+            self.__fetch_bucket_frequencies(scope, [key])
+        )[key]
 
         # Flatten the results of each band into a single set. (In the future we
         # might want to change this to only calculate the similarity for keys
@@ -259,7 +268,9 @@ class MinHashIndex(object):
                         candidate_frequencies,
                     ),
                 ),
-                self.__fetch_bucket_frequencies(scope, candidates).items(),
+                scale_bucket_frequencies(
+                    self.__fetch_bucket_frequencies(scope, candidates)
+                ).items(),
             ),
             key=lambda (key, similarity): (similarity * -1, key),
         )

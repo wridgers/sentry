@@ -164,6 +164,24 @@ class MinHashIndex(object):
             )
         ) / len(target)
 
+    def __get_bucket_frequency_key(self, scope, band, key):
+        return b'{}:{}:{}:{}:{}'.format(
+            self.namespace,
+            scope,
+            self.BUCKET_FREQUENCY,
+            self.__band_format.pack(band),
+            key,
+        )
+
+    def __get_bucket_membership_key(self, scope, band, bucket):
+        return b'{}:{}:{}:{}:{}'.format(
+            self.namespace,
+            scope,
+            self.BUCKET_MEMBERSHIP,
+            self.__band_format.pack(band),
+            self.__bucket_format.pack(*bucket),
+        )
+
     def get_bucket_membership(self, scope, bands):
         responses = []
 
@@ -172,13 +190,11 @@ class MinHashIndex(object):
                 responses.append(
                     map(
                         lambda bucket: client.smembers(
-                            b'{}:{}:{}:{}:{}'.format(
-                                self.namespace,
+                            self.__get_bucket_membership_key(
                                 scope,
-                                self.BUCKET_MEMBERSHIP,
-                                self.__band_format.pack(band),
-                                self.__bucket_format.pack(*bucket),
-                            )
+                                band,
+                                bucket,
+                            ),
                         ),
                         buckets,
                     )
@@ -197,11 +213,9 @@ class MinHashIndex(object):
             responses = {
                 key: map(
                     lambda band: client.zrange(
-                        b'{}:{}:{}:{}:{}'.format(
-                            self.namespace,
+                        self.__get_bucket_frequency_key(
                             scope,
-                            self.BUCKET_FREQUENCY,
-                            self.__band_format.pack(band),
+                            band,
                             key,
                         ),
                         0,
@@ -232,32 +246,32 @@ class MinHashIndex(object):
                         logger.debug('No frequencies recorded for %r in band %r, skipping...', source, band)
                         continue
 
-                    get_bucket_frequency_key = lambda key: b'{}:{}:{}:{}:{}'.format(
-                        self.namespace,
-                        scope,
-                        self.BUCKET_FREQUENCY,
-                        self.__band_format.pack(band),
-                        key,
-                    )
-
                     # Update the bucket frequencies for the destination, based on source data.
                     for bucket, frequency in frequencies.items():
                         client.zincrby(
-                            get_bucket_frequency_key(destination),
+                            self.__get_bucket_frequency_key(
+                                scope,
+                                band,
+                                destination,
+                            ),
                             self.__bucket_format.pack(*bucket),
                             frequency,
                         )
 
                     # Delete the bucket frequencies for the sources.
-                    client.delete(get_bucket_frequency_key(source))
+                    client.delete(
+                        self.__get_bucket_frequency_key(
+                            scope,
+                            band,
+                            source,
+                        ),
+                    )
 
                     for bucket, frequency in frequencies.items():
-                        bucket_membership_set_key = b'{}:{}:{}:{}:{}'.format(
-                            self.namespace,
+                        bucket_membership_set_key = self.__get_bucket_membership_key(
                             scope,
-                            self.BUCKET_MEMBERSHIP,
-                            self.__band_format.pack(band),
-                            self.__bucket_format.pack(*bucket),
+                            band,
+                            bucket,
                         )
 
                         # Add destination to bucket membership sets.
@@ -338,27 +352,22 @@ class MinHashIndex(object):
         """
         with self.cluster.map() as client:
             for scope, key, characteristics in items:
-                for band, buckets in enumerate(self.get_signature(characteristics)):
-                    buckets = self.__bucket_format.pack(*buckets)
+                for band, bucket in enumerate(self.get_signature(characteristics)):
                     client.sadd(
-                        b'{}:{}:{}:{}:{}'.format(
-                            self.namespace,
+                        self.__get_bucket_membership_key(
                             scope,
-                            self.BUCKET_MEMBERSHIP,
-                            self.__band_format.pack(band),
-                            buckets,
+                            band,
+                            bucket,
                         ),
                         key,
                     )
                     client.zincrby(
-                        b'{}:{}:{}:{}:{}'.format(
-                            self.namespace,
+                        self.__get_bucket_frequency_key(
                             scope,
-                            self.BUCKET_FREQUENCY,
-                            self.__band_format.pack(band),
+                            band,
                             key,
                         ),
-                        buckets,
+                        self.__bucket_format.pack(*bucket),
                         1,
                     )
 

@@ -164,6 +164,34 @@ class MinHashIndex(object):
             )
         ) / len(target)
 
+    def get_bucket_membership(self, scope, bands):
+        responses = []
+
+        with self.cluster.map() as client:
+            for band, buckets in enumerate(bands):
+                responses.append(
+                    map(
+                        lambda bucket: client.smembers(
+                            b'{}:{}:{}:{}:{}'.format(
+                                self.namespace,
+                                scope,
+                                self.BUCKET_MEMBERSHIP,
+                                self.__band_format.pack(band),
+                                self.__bucket_format.pack(*bucket),
+                            )
+                        ),
+                        buckets,
+                    )
+                )
+
+        return map(
+            lambda response: map(
+                lambda promise: promise.value,
+                response,
+            ),
+            responses,
+        )
+
     def get_bucket_frequencies(self, scope, keys):
         with self.cluster.map() as client:
             responses = {
@@ -224,7 +252,7 @@ class MinHashIndex(object):
                     client.delete(get_bucket_frequency_key(source))
 
                     for bucket, frequency in frequencies.items():
-                        bucket_membership_set_key = b'{}:{}:{}:{}'.format(
+                        bucket_membership_set_key = b'{}:{}:{}:{}:{}'.format(
                             self.namespace,
                             scope,
                             self.BUCKET_MEMBERSHIP,
@@ -251,32 +279,15 @@ class MinHashIndex(object):
         """
         def fetch_candidates(signature):
             """Fetch all the similar candidates for a given signature."""
-            with self.cluster.map() as client:
-                responses = map(
-                    lambda (band, buckets): map(
-                        lambda bucket: client.smembers(
-                            b'{}:{}:{}:{}:{}'.format(
-                                self.namespace,
-                                scope,
-                                self.BUCKET_MEMBERSHIP,
-                                self.__band_format.pack(band),
-                                self.__bucket_format.pack(*bucket),
-                            )
-                        ),
-                        buckets,
-                    ),
-                    enumerate(signature),
-                )
-
             # Resolve all of the promises for each band and reduce them into a
             # single set per band.
             return map(
                 lambda band: reduce(
-                    lambda values, promise: values | promise.value,
+                    lambda aggregate, value: aggregate | value,
                     band,
                     set(),
                 ),
-                responses,
+                self.get_bucket_membership(scope, signature),
             )
 
         def scale_bucket_frequencies(results):

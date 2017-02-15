@@ -280,18 +280,54 @@ class MinHashIndexTestCase(TestCase):
             2,
         )
 
-        index.record('example', '1', 'hello world')
-        index.record('example', '2', 'jello world')
+        namespace = 'example'
+        data = {
+            '1': 'hello world',
+            '2': 'jello world',
+        }
+
+        for key, value in data.items():
+            index.record(namespace, key, value)
+
+        frequencies = index.get_bucket_frequencies(namespace, data.keys())
+
+        for key, value in data.items():
+            signature = index.get_signature(value)
+
+            bucket_membership = index.get_bucket_membership(
+                namespace,
+                [[bucket] for bucket in signature],
+            )
+
+            for i, membership_sets in enumerate(bucket_membership):
+                assert key in membership_sets[0]
+                assert frequencies[key][i] == {tuple(signature[i]): 1.0}
 
         totals = [Counter() for _ in xrange(8)]
-        frequencies = index.get_bucket_frequencies('example', ['1', '2'])
         for key, bands in frequencies.items():
             for i, band in enumerate(bands):
                 totals[i].update(band)
 
-        index.merge('example', '1', ['2'])
+        destination_key, destination_value = data.popitem()
+        source_key, source_value = data.popitem()
 
-        assert index.get_bucket_frequencies('example', ['1', '2']) == {
-            '1': map(lambda band: dict(band), totals),
-            '2': [{} for _ in xrange(8)],
+        index.merge(namespace, destination_key, [source_key])
+
+        assert index.get_bucket_frequencies(namespace, [destination_key, source_key]) == {
+            destination_key: map(lambda band: dict(band), totals),
+            source_key: [{} for _ in xrange(8)],
         }
+
+        assert index.get_bucket_membership(
+            namespace,
+            [[bucket] for bucket in index.get_signature(destination_value)]
+        ) == [[set([destination_key])] for _ in xrange(8)]
+
+        source_signature_buckets = index.get_bucket_membership(
+            namespace,
+            [[bucket] for bucket in index.get_signature(source_value)]
+        )
+
+        for buckets in source_signature_buckets:
+            bucket, = buckets
+            assert source_key not in bucket

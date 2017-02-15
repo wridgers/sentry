@@ -241,13 +241,17 @@ class MinHashIndex(object):
 
         with self.cluster.map() as client:
             for source, bands in source_bucket_frequencies.items():
-                for band, frequencies in enumerate(bands):
-                    if not frequencies:
+                for band, buckets in enumerate(bands):
+                    if not buckets:
                         logger.debug('No frequencies recorded for %r in band %r, skipping...', source, band)
                         continue
 
-                    # Update the bucket frequencies for the destination, based on source data.
-                    for bucket, frequency in frequencies.items():
+                    # Update the bucket frequencies for the destination, based
+                    # on source data. (Annoyingly, ``ZINCRBY`` only takes one
+                    # item and score at time, and ``ZADD INCR`` is only
+                    # available on Redis 3.0.2+, and still unavailable in
+                    # ``redis-py`` at the time of writing.)
+                    for bucket, frequency in buckets.items():
                         client.zincrby(
                             self.__get_bucket_frequency_key(
                                 scope,
@@ -267,7 +271,7 @@ class MinHashIndex(object):
                         ),
                     )
 
-                    for bucket, frequency in frequencies.items():
+                    for bucket, frequency in buckets.items():
                         bucket_membership_set_key = self.__get_bucket_membership_key(
                             scope,
                             band,

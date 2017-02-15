@@ -331,3 +331,14 @@ class MinHashIndexTestCase(TestCase):
         for buckets in source_signature_buckets:
             bucket, = buckets
             assert source_key not in bucket
+
+        # Ensure that merging a source without values doesn't cause any errors.
+        index.merge(namespace, destination_key, ['invalid'])
+
+        # Ensure that merging a into a destination without data correctly executes.
+        index.merge(namespace, 'empty', [destination_key])  # should not raise
+
+        assert index.get_bucket_frequencies(namespace, ['empty', destination_key]) == {
+            destination_key: [{} for _ in xrange(8)],
+            'empty': map(lambda band: dict(band), totals),
+        }

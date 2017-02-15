@@ -163,6 +163,41 @@ class MinHashIndex(object):
             )
         ) / len(target)
 
+    def __fetch_bucket_frequencies(self, scope, keys):
+        with self.cluster.map() as client:
+            responses = {
+                key: map(
+                    lambda band: client.zrange(
+                        b'{}:{}:{}:{}:{}'.format(
+                            self.namespace,
+                            scope,
+                            self.BUCKET_FREQUENCY,
+                            self.__band_format.pack(band),
+                            key,
+                        ),
+                        0,
+                        -1,
+                        desc=True,
+                        withscores=True,
+                    ),
+                    range(len(self.bands)),
+                ) for key in keys
+            }
+
+        result = {}
+        for key, promises in responses.items():
+            # Resolve each promise, and scale the number of observations
+            # for each bucket to [0,1] value (the proportion of items
+            # observed in that band that belong to the bucket for the key.)
+            result[key] = map(
+                lambda promise: scale_to_total({
+                    self.__bucket_format.unpack(k): v for k, v in promise.value
+                }),
+                promises,
+            )
+
+        return result
+
     def query(self, scope, key):
         """\
         Find other entries that are similar to the one repesented by ``key``.
@@ -174,42 +209,6 @@ class MinHashIndex(object):
         isn't filtered from the result and will always have a similarity of 1,
         typically making it the first result.)
         """
-        def fetch_bucket_frequencies(keys):
-            """Fetch the bucket frequencies for each band for each provided key."""
-            with self.cluster.map() as client:
-                responses = {
-                    key: map(
-                        lambda band: client.zrange(
-                            b'{}:{}:{}:{}:{}'.format(
-                                self.namespace,
-                                scope,
-                                self.BUCKET_FREQUENCY,
-                                self.__band_format.pack(band),
-                                key,
-                            ),
-                            0,
-                            -1,
-                            desc=True,
-                            withscores=True,
-                        ),
-                        range(len(self.bands)),
-                    ) for key in keys
-                }
-
-            result = {}
-            for key, promises in responses.items():
-                # Resolve each promise, and scale the number of observations
-                # for each bucket to [0,1] value (the proportion of items
-                # observed in that band that belong to the bucket for the key.)
-                result[key] = map(
-                    lambda promise: scale_to_total({
-                        self.__bucket_format.unpack(k): v for k, v in promise.value
-                    }),
-                    promises,
-                )
-
-            return result
-
         def fetch_candidates(signature):
             """Fetch all the similar candidates for a given signature."""
             with self.cluster.map() as client:
@@ -240,7 +239,7 @@ class MinHashIndex(object):
                 responses,
             )
 
-        target_frequencies = fetch_bucket_frequencies([key])[key]
+        target_frequencies = self.__fetch_bucket_frequencies(scope, [key])[key]
 
         # Flatten the results of each band into a single set. (In the future we
         # might want to change this to only calculate the similarity for keys
@@ -260,7 +259,7 @@ class MinHashIndex(object):
                         candidate_frequencies,
                     ),
                 ),
-                fetch_bucket_frequencies(candidates).items(),
+                self.__fetch_bucket_frequencies(scope, candidates).items(),
             ),
             key=lambda (key, similarity): (similarity * -1, key),
         )

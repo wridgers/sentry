@@ -77,6 +77,7 @@ from .endpoints.project_tagkey_values import ProjectTagKeyValuesEndpoint
 from .endpoints.project_users import ProjectUsersEndpoint
 from .endpoints.project_user_reports import ProjectUserReportsEndpoint
 from .endpoints.release_commits import ReleaseCommitsEndpoint
+from .endpoints.filechange import CommitFileChangeEndpoint
 from .endpoints.project_release_details import ProjectReleaseDetailsEndpoint
 from .endpoints.release_files import ReleaseFilesEndpoint
 from .endpoints.release_file_details import ReleaseFileDetailsEndpoint
@@ -290,6 +291,9 @@ urlpatterns = patterns(
         name='sentry-api-0-project-release-details'),
     url(r'^projects/(?P<organization_slug>[^\/]+)/(?P<project_slug>[^\/]+)/releases/(?P<version>[^/]+)/commits/$',
         ReleaseCommitsEndpoint.as_view(),
+        name='sentry-api-0-release-commits'),
+    url(r'^projects/(?P<organization_slug>[^\/]+)/(?P<project_slug>[^\/]+)/releases/(?P<version>[^/]+)/commitfiles/$',
+        CommitFileChangeEndpoint.as_view(),
         name='sentry-api-0-release-commits'),
     url(r'^projects/(?P<organization_slug>[^\/]+)/(?P<project_slug>[^\/]+)/releases/(?P<version>[^/]+)/files/$',
         ReleaseFilesEndpoint.as_view(),

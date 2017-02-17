@@ -13,6 +13,7 @@ Version 8.14 (Unreleased)
 - Added OrganizationReleasesEndpoint
 - Added context type app for cocoa events
 - Added basic encryption facilities (``sentry.utils.encryption``).
+- Split out filtered stats onto Inbound Data Filters page
 
 Schema Changes
 ~~~~~~~~~~~~~~

@@ -304,6 +304,12 @@ class MinHashIndex(object):
         ])
 
 
+class ExtractionFailure(Exception):
+    """\
+    Exception raised when characteristics can't be be extracted from an event.
+    """
+
+
 FRAME_ITEM_SEPARATOR = b'\x00'
 FRAME_PAIR_SEPARATOR = b'\x01'
 FRAME_SEPARATOR = b'\x02'
@@ -319,14 +325,19 @@ def get_frame_signature(frame, lines=5):
     Creates a "signature" for a frame from the surrounding context lines,
     reading up to ``lines`` values from each side.
     """
+    try:
+        lines = (
+            frame.get('pre_context') or [])[-lines:] +
+            [frame['context_line']] +
+            (frame.get('post_context') or [])[:lines]
+        )
+    except KeyError:
+        raise ExtractionFailure('Cannot create signature for frame without context line.')
+
     return struct.pack(
         '>i',
         mmh3.hash(
-            u'\n'.join(
-                (frame.get('pre_context') or [])[-lines:] +
-                [frame['context_line']] +
-                (frame.get('post_context') or [])[:lines]
-            ).encode('utf8')
+            u'\n'.join(lines).encode('utf8')
         ),
     )
 
@@ -404,7 +415,12 @@ def get_application_chunks(exception):
     )
 
 
-class ExceptionFeature(object):
+class Feature(object):
+    def extract(self, event):
+        raise NotImplementedError
+
+
+class ExceptionFeature(Feature):
     def __init__(self, function):
         self.function = function
 
@@ -419,10 +435,11 @@ class ExceptionFeature(object):
             try:
                 yield self.function(exception)
             except Exception as error:
-                logger.exception('Could not extract characteristic(s) from exception in %r due to error: %r', event, error)
+                log = logger.info if isinstance(error, ExtractionFailure) else logger.exception
+                log('Could not extract characteristic(s) from exception in %r due to error: %r', event, error)
 
 
-class MessageFeature(object):
+class MessageFeature(Feature):
     def __init__(self, function):
         self.function = function
 
@@ -436,7 +453,8 @@ class MessageFeature(object):
         try:
             yield self.function(message)
         except Exception as error:
-            logger.exception('Could not extract characteristic(s) from message of %r due to error: %r', event, error)
+            log = logger.info if isinstance(error, ExtractionFailure) else logger.exception
+            log('Could not extract characteristic(s) from message of %r due to error: %r', event, error)
 
 
 class FeatureSet(object):

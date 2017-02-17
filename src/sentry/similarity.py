@@ -326,18 +326,16 @@ def get_frame_signature(frame, lines=5):
     reading up to ``lines`` values from each side.
     """
     try:
-        lines = (
-            frame.get('pre_context') or [])[-lines:] +
-            [frame['context_line']] +
+        context = (frame.get('pre_context') or [])[-lines:] + \
+            [frame['context_line']] + \
             (frame.get('post_context') or [])[:lines]
-        )
     except KeyError:
         raise ExtractionFailure('Cannot create signature for frame without context line.')
 
     return struct.pack(
         '>i',
         mmh3.hash(
-            u'\n'.join(lines).encode('utf8')
+            u'\n'.join(context).encode('utf8')
         ),
     )
 

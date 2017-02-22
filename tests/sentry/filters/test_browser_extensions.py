@@ -47,6 +47,10 @@ class BrowserExtensionsFilterTest(TestCase):
         data = self.get_mock_data(exc_value='null is not an object (evaluating \'elt.parentNode\')')
         assert self.apply_filter(data)
 
+    def test_filters_dragon_web_extension(self):
+        data = self.get_mock_data(exc_value='plugin.setSuspendState is not a function')
+        assert self.apply_filter(data)
+
     def test_filters_chrome_extensions(self):
         data = self.get_mock_data(exc_source='chrome://my-extension/or/something')
         assert self.apply_filter(data)

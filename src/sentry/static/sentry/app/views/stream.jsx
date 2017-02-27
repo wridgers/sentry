@@ -63,7 +63,7 @@ const Stream = React.createClass({
       multiSelected: false,
       anySelected: false,
       statsPeriod: this.props.defaultStatsPeriod,
-      realtimeActive: Cookies.get('realtimeActive') === 'true',
+      realtimeActive: Cookies.get('realtimeActive') === undefined ? true : (Cookies.get('realtimeActive') === 'true'),
       pageLinks: '',
       dataLoading: true,
       error: false,
